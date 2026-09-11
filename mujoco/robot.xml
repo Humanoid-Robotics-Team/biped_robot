@@ -1,0 +1,227 @@
+<mujoco model="BR1">
+  <!-- ================================================================= -->
+  <!--  BR-1  |  Biped Robot, Generation 1                               -->
+  <!--  12 actuated DOF (6 per leg) + 6-DOF floating base                -->
+  <!--  Units: SI. Internally MuJoCo uses radians; joint ranges here     -->
+  <!--  are in DEGREES for readability (compiler angle="degree").        -->
+  <!--                                                                   -->
+  <!--  CONFIDENCE TAGS (see config/robot.yaml for the full list):       -->
+  <!--    DERIVED            = computed from a stated model/ratio         -->
+  <!--    INITIAL ASSUMPTION = placeholder, replace with CAD/bench data   -->
+  <!--    CONVENTION         = a modelling choice, not a physical fact    -->
+  <!-- ================================================================= -->
+
+  <compiler angle="degree" autolimits="true"/>
+
+  <!-- timestep 2 ms = 500 Hz physics. Policy will run at 50 Hz (decimation 10).
+       implicitfast integrator: stable with joint damping + contacts.        -->
+  <option timestep="0.002" integrator="implicitfast"/>
+
+  <default>
+    <default class="br1">
+      <!-- damping/armature/frictionloss are INITIAL ASSUMPTIONS.
+           damping     : lumped viscous friction (bearings, gearbox oil)
+           armature    : reflected rotor inertia = I_rotor * gear^2  (gear=8)
+           frictionloss: Coulomb (dry) friction torque at the joint            -->
+      <joint damping="1.0" armature="0.01" frictionloss="0.2"/>
+      <geom condim="3" friction="1.0 0.005 0.0001"/>
+
+      <!-- visual-only geometry: carries no mass (explicit <inertial> wins) and
+           never collides.                                                     -->
+      <default class="viz">
+        <geom type="capsule" contype="0" conaffinity="0" group="2"
+              rgba="0.78 0.80 0.85 1"/>
+      </default>
+
+      <!-- collision geometry: collides with the FLOOR only (conaffinity=0
+           disables all robot self-collision for Milestones 1-6).              -->
+      <default class="col">
+        <geom group="3" rgba="0.90 0.50 0.20 0.35" contype="1" conaffinity="0"/>
+      </default>
+    </default>
+  </default>
+
+  <worldbody>
+    <!-- ===================== FLOATING BASE ===================== -->
+    <body name="pelvis" pos="0 0 0.86" childclass="br1">
+      <freejoint name="root"/>
+      <!-- pelvis box 0.22 x 0.16 x 0.12 m, uniform density -> diag inertia. INITIAL ASSUMPTION -->
+      <inertial pos="0 0 0" mass="4.0" diaginertia="0.013 0.021 0.025"/>
+      <geom class="viz" type="box" size="0.11 0.08 0.06"/>
+      <!-- IMU strapdown location (base frame). gyro + accel + orientation. -->
+      <site name="imu" pos="0 0 0" size="0.012" rgba="1 0 0 1"/>
+
+      <!-- rigid upper body (no waist joint in Gen-1): trunk + head + arm mass -->
+      <body name="torso" pos="0 0 0.30">
+        <inertial pos="0 0 0" mass="14.6" diaginertia="0.286 0.316 0.110"/>
+        <geom class="viz" type="box" size="0.12 0.09 0.225"/>
+      </body>
+
+      <!-- ========================= LEFT LEG ========================= -->
+      <body name="L_hip_yaw_link" pos="0 0.10 -0.06">
+        <joint name="L_hip_yaw" axis="0 0 1" range="-45 45"/>
+        <inertial pos="0 0 0" mass="0.35" diaginertia="0.0004 0.0004 0.0004"/>
+        <geom class="viz" type="sphere" size="0.045"/>
+
+        <body name="L_hip_roll_link" pos="0 0 0">
+          <joint name="L_hip_roll" axis="1 0 0" range="-25 35"/>
+          <inertial pos="0 0 0" mass="0.35" diaginertia="0.0004 0.0004 0.0004"/>
+          <geom class="viz" type="sphere" size="0.045"/>
+
+          <body name="L_thigh" pos="0 0 0">
+            <joint name="L_hip_pitch" axis="0 1 0" range="-135 30"/>
+            <inertial pos="0 0 -0.19" mass="3.3" diaginertia="0.042 0.042 0.005"/>
+            <geom class="viz" fromto="0 0 0 0 0 -0.38" size="0.055"/>
+            <geom class="col" type="capsule" fromto="0 0 -0.06 0 0 -0.32" size="0.05"/>
+
+            <body name="L_shank" pos="0 0 -0.38">
+              <joint name="L_knee" axis="0 1 0" range="0 150"/>
+              <inertial pos="0 0 -0.18" mass="1.8" diaginertia="0.020 0.020 0.0018"/>
+              <geom class="viz" fromto="0 0 0 0 0 -0.36" size="0.045"/>
+              <geom class="col" type="capsule" fromto="0 0 -0.05 0 0 -0.31" size="0.04"/>
+
+              <body name="L_ankle_link" pos="0 0 -0.36">
+                <joint name="L_ankle_pitch" axis="0 1 0" range="-45 30"/>
+                <inertial pos="0 0 0" mass="0.30" diaginertia="0.0004 0.0004 0.0004"/>
+                <geom class="viz" type="sphere" size="0.035"/>
+
+                <body name="L_foot" pos="0 0 0">
+                  <joint name="L_ankle_roll" axis="1 0 0" range="-20 20"/>
+                  <!-- foot box 0.20(L) x 0.09(W) x 0.04(H); CoM 4 cm fwd, 4 cm below ankle -->
+                  <inertial pos="0.04 0 -0.04" mass="0.60" diaginertia="0.00049 0.0021 0.0024"/>
+                  <geom class="viz" type="box" pos="0.04 0 -0.04" size="0.10 0.045 0.02"/>
+                  <geom name="L_sole" class="col" type="box" pos="0.04 0 -0.04"
+                        size="0.10 0.045 0.02" friction="1.0 0.02 0.001" condim="3"/>
+                  <!-- touch sensor volume (encloses the sole) -->
+                  <site name="L_foot_site" type="box" pos="0.04 0 -0.04"
+                        size="0.105 0.05 0.025" rgba="0 1 0 0.12"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <!-- ========================= RIGHT LEG ========================= -->
+      <body name="R_hip_yaw_link" pos="0 -0.10 -0.06">
+        <joint name="R_hip_yaw" axis="0 0 1" range="-45 45"/>
+        <inertial pos="0 0 0" mass="0.35" diaginertia="0.0004 0.0004 0.0004"/>
+        <geom class="viz" type="sphere" size="0.045"/>
+
+        <body name="R_hip_roll_link" pos="0 0 0">
+          <joint name="R_hip_roll" axis="1 0 0" range="-25 35"/>
+          <inertial pos="0 0 0" mass="0.35" diaginertia="0.0004 0.0004 0.0004"/>
+          <geom class="viz" type="sphere" size="0.045"/>
+
+          <body name="R_thigh" pos="0 0 0">
+            <joint name="R_hip_pitch" axis="0 1 0" range="-135 30"/>
+            <inertial pos="0 0 -0.19" mass="3.3" diaginertia="0.042 0.042 0.005"/>
+            <geom class="viz" fromto="0 0 0 0 0 -0.38" size="0.055"/>
+            <geom class="col" type="capsule" fromto="0 0 -0.06 0 0 -0.32" size="0.05"/>
+
+            <body name="R_shank" pos="0 0 -0.38">
+              <joint name="R_knee" axis="0 1 0" range="0 150"/>
+              <inertial pos="0 0 -0.18" mass="1.8" diaginertia="0.020 0.020 0.0018"/>
+              <geom class="viz" fromto="0 0 0 0 0 -0.36" size="0.045"/>
+              <geom class="col" type="capsule" fromto="0 0 -0.05 0 0 -0.31" size="0.04"/>
+
+              <body name="R_ankle_link" pos="0 0 -0.36">
+                <joint name="R_ankle_pitch" axis="0 1 0" range="-45 30"/>
+                <inertial pos="0 0 0" mass="0.30" diaginertia="0.0004 0.0004 0.0004"/>
+                <geom class="viz" type="sphere" size="0.035"/>
+
+                <body name="R_foot" pos="0 0 0">
+                  <joint name="R_ankle_roll" axis="1 0 0" range="-20 20"/>
+                  <inertial pos="0.04 0 -0.04" mass="0.60" diaginertia="0.00049 0.0021 0.0024"/>
+                  <geom class="viz" type="box" pos="0.04 0 -0.04" size="0.10 0.045 0.02"/>
+                  <geom name="R_sole" class="col" type="box" pos="0.04 0 -0.04"
+                        size="0.10 0.045 0.02" friction="1.0 0.02 0.001" condim="3"/>
+                  <site name="R_foot_site" type="box" pos="0.04 0 -0.04"
+                        size="0.105 0.05 0.025" rgba="0 1 0 0.12"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- ===================== ACTUATORS ===================== -->
+  <!-- Pure torque sources. ctrl = commanded joint torque [Nm].
+       The PD position loop lives in Python (control/pd_controller.py) so the
+       exact same control code runs on the real robot.
+       forcerange = INITIAL ASSUMPTION peak torque
+                  = motor_stall_torque * gear_ratio * efficiency (to be measured). -->
+  <actuator>
+    <motor name="L_hip_yaw"     joint="L_hip_yaw"     ctrlrange="-40 40"   forcerange="-40 40"/>
+    <motor name="L_hip_roll"    joint="L_hip_roll"    ctrlrange="-100 100" forcerange="-100 100"/>
+    <motor name="L_hip_pitch"   joint="L_hip_pitch"   ctrlrange="-120 120" forcerange="-120 120"/>
+    <motor name="L_knee"        joint="L_knee"        ctrlrange="-120 120" forcerange="-120 120"/>
+    <motor name="L_ankle_pitch" joint="L_ankle_pitch" ctrlrange="-80 80"   forcerange="-80 80"/>
+    <motor name="L_ankle_roll"  joint="L_ankle_roll"  ctrlrange="-40 40"   forcerange="-40 40"/>
+    <motor name="R_hip_yaw"     joint="R_hip_yaw"     ctrlrange="-40 40"   forcerange="-40 40"/>
+    <motor name="R_hip_roll"    joint="R_hip_roll"    ctrlrange="-100 100" forcerange="-100 100"/>
+    <motor name="R_hip_pitch"   joint="R_hip_pitch"   ctrlrange="-120 120" forcerange="-120 120"/>
+    <motor name="R_knee"        joint="R_knee"        ctrlrange="-120 120" forcerange="-120 120"/>
+    <motor name="R_ankle_pitch" joint="R_ankle_pitch" ctrlrange="-80 80"   forcerange="-80 80"/>
+    <motor name="R_ankle_roll"  joint="R_ankle_roll"  ctrlrange="-40 40"   forcerange="-40 40"/>
+  </actuator>
+
+  <!-- ===================== SENSORS ===================== -->
+  <!-- Everything the SIM can measure. Which of these the RL *actor* is allowed
+       to see is decided in env/observations.py (must be onboard-measurable). -->
+  <sensor>
+    <!-- joint encoders -->
+    <jointpos name="L_hip_yaw_pos"     joint="L_hip_yaw"/>
+    <jointpos name="L_hip_roll_pos"    joint="L_hip_roll"/>
+    <jointpos name="L_hip_pitch_pos"   joint="L_hip_pitch"/>
+    <jointpos name="L_knee_pos"        joint="L_knee"/>
+    <jointpos name="L_ankle_pitch_pos" joint="L_ankle_pitch"/>
+    <jointpos name="L_ankle_roll_pos"  joint="L_ankle_roll"/>
+    <jointpos name="R_hip_yaw_pos"     joint="R_hip_yaw"/>
+    <jointpos name="R_hip_roll_pos"    joint="R_hip_roll"/>
+    <jointpos name="R_hip_pitch_pos"   joint="R_hip_pitch"/>
+    <jointpos name="R_knee_pos"        joint="R_knee"/>
+    <jointpos name="R_ankle_pitch_pos" joint="R_ankle_pitch"/>
+    <jointpos name="R_ankle_roll_pos"  joint="R_ankle_roll"/>
+    <!-- joint velocities (encoder difference on hardware) -->
+    <jointvel name="L_hip_yaw_vel"     joint="L_hip_yaw"/>
+    <jointvel name="L_hip_roll_vel"    joint="L_hip_roll"/>
+    <jointvel name="L_hip_pitch_vel"   joint="L_hip_pitch"/>
+    <jointvel name="L_knee_vel"        joint="L_knee"/>
+    <jointvel name="L_ankle_pitch_vel" joint="L_ankle_pitch"/>
+    <jointvel name="L_ankle_roll_vel"  joint="L_ankle_roll"/>
+    <jointvel name="R_hip_yaw_vel"     joint="R_hip_yaw"/>
+    <jointvel name="R_hip_roll_vel"    joint="R_hip_roll"/>
+    <jointvel name="R_hip_pitch_vel"   joint="R_hip_pitch"/>
+    <jointvel name="R_knee_vel"        joint="R_knee"/>
+    <jointvel name="R_ankle_pitch_vel" joint="R_ankle_pitch"/>
+    <jointvel name="R_ankle_roll_vel"  joint="R_ankle_roll"/>
+    <!-- IMU (strapdown at 'imu' site) -->
+    <gyro          name="imu_gyro"  site="imu"/>
+    <accelerometer name="imu_acc"   site="imu"/>
+    <framequat     name="imu_quat"  objtype="site" objname="imu"/>
+    <!-- privileged / logging only (NOT onboard-measurable): -->
+    <framelinvel   name="base_linvel" objtype="site" objname="imu"/>
+    <framepos      name="base_pos"    objtype="site" objname="imu"/>
+    <!-- foot contact (normal force sum). On HW: F/T sensor or contact estimator -->
+    <touch name="L_touch" site="L_foot_site"/>
+    <touch name="R_touch" site="R_foot_site"/>
+  </sensor>
+
+  <!-- ===================== KEYFRAMES ===================== -->
+  <!-- 'stand' = nominal standing pose. Joint angles in RADIANS (keyframe qpos
+       is always radians regardless of compiler angle setting).
+       Per leg: hip_yaw hip_roll hip_pitch knee ankle_pitch ankle_roll
+                0      0       -14deg    +28deg  -14deg      0
+       -> slight knee bend: away from the straight-leg singularity, gives the
+          ankle/hip authority to balance. Base z chosen so the soles sit ~2 cm
+          above the floor and settle onto it. -->
+  <keyframe>
+    <key name="stand"
+         qpos="0 0 0.86  1 0 0 0
+               0 0 -0.24435 0.48869 -0.24435 0
+               0 0 -0.24435 0.48869 -0.24435 0"/>
+  </keyframe>
+</mujoco>

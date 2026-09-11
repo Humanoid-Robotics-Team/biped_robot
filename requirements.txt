@@ -1,0 +1,12 @@
+# BR-1 core stack. Pinned for reproducibility (see experiments/EXP-registry.md).
+# Python 3.10 or 3.11.  Install order matters only for torch (CUDA index-url in README).
+mujoco>=3.2.5,<3.4
+gymnasium==0.29.1
+stable-baselines3[extra]==2.3.2
+torch==2.2.2
+numpy<2.0
+pyyaml==6.0.2
+matplotlib==3.9.2
+pytest==8.3.3
+ruff
+black

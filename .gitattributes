@@ -1,0 +1,6 @@
+# Enable Git LFS for large binaries once you start keeping trained policies.
+# Run once:  git lfs install
+*.zip   filter=lfs diff=lfs merge=lfs -text
+*.pt    filter=lfs diff=lfs merge=lfs -text
+*.onnx  filter=lfs diff=lfs merge=lfs -text
+*.mp4   filter=lfs diff=lfs merge=lfs -text

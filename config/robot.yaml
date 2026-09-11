@@ -1,0 +1,82 @@
+# =====================================================================
+#  BR-1  |  Biped Robot Gen-1  |  machine-readable specification
+#  Every value carries a confidence tag:
+#    DERIVED   | INITIAL_ASSUMPTION | CONVENTION | MEASURED (none yet)
+#  Replace INITIAL_ASSUMPTION values with CAD / bench measurements
+#  during Milestone 9 (sim-to-real). Keep this file in sync with
+#  mujoco/robot.xml -- scripts read the XML as ground truth, this file
+#  is the human-facing record + source for the RL config.
+# =====================================================================
+
+meta:
+  name: BR-1
+  generation: 1
+  units: SI            # m, kg, s, N, rad
+
+body:
+  standing_height_m: 1.39          # INITIAL_ASSUMPTION (sole -> top of torso)
+  total_mass_kg:     32.0          # DERIVED from segment masses below
+  com_height_standing_m: 0.84      # DERIVED (uniform-density segments)
+  hip_separation_m: 0.20           # INITIAL_ASSUMPTION
+  leg_length_hip_to_sole_m: 0.80   # DERIVED = 0.38 + 0.36 + 0.06
+
+segments:                          # all masses/inertias INITIAL_ASSUMPTION
+  torso_plus_head: {mass_kg: 14.6, box_xyz_m: [0.24, 0.18, 0.45]}
+  pelvis:          {mass_kg: 4.0,  box_xyz_m: [0.22, 0.16, 0.12]}
+  hip_yaw_link:    {mass_kg: 0.35}
+  hip_roll_link:   {mass_kg: 0.35}
+  thigh:           {mass_kg: 3.3,  capsule_len_m: 0.38, radius_m: 0.055}
+  shank:           {mass_kg: 1.8,  capsule_len_m: 0.36, radius_m: 0.045}
+  ankle_link:      {mass_kg: 0.30}
+  foot:            {mass_kg: 0.60, box_LWH_m: [0.20, 0.09, 0.04]}
+
+# Per-leg joint chain (identical left/right). 6 DOF per leg, 12 total.
+# range_deg, torque_nm, vel_rad_s  -> all INITIAL_ASSUMPTION
+#   torque = motor_stall * gear(8) * efficiency          [to be measured]
+#   range  = mechanism hard stops from CAD               [to be measured]
+# kp/kd are the Python PD gains (control/pd_controller.py) -> INITIAL_ASSUMPTION,
+#   tuned in Milestone 2 to hold the nominal pose without oscillation.
+joints:
+  hip_yaw:     {range_deg: [-45,  45], torque_nm:  40, vel_rad_s: 20, kp: 200, kd: 6}
+  hip_roll:    {range_deg: [-25,  35], torque_nm: 100, vel_rad_s: 20, kp: 200, kd: 6}
+  hip_pitch:   {range_deg: [-135, 30], torque_nm: 120, vel_rad_s: 20, kp: 200, kd: 6}
+  knee:        {range_deg: [0,   150], torque_nm: 120, vel_rad_s: 20, kp: 200, kd: 6}
+  ankle_pitch: {range_deg: [-45,  30], torque_nm:  80, vel_rad_s: 18, kp: 120, kd: 3}
+  ankle_roll:  {range_deg: [-20,  20], torque_nm:  40, vel_rad_s: 18, kp: 120, kd: 3}
+
+# Standing pose used by the 'stand' keyframe and as the RL action offset q_nom.
+nominal_pose_deg:
+  hip_yaw:     0
+  hip_roll:    0
+  hip_pitch:  -14
+  knee:        28
+  ankle_pitch: -14
+  ankle_roll:  0
+
+actuation:
+  model: torque_source_plus_python_pd     # CONVENTION (Option C from the design doc)
+  gear_ratio: 8                           # INITIAL_ASSUMPTION (quasi-direct-drive)
+  armature_reflected_inertia: 0.01        # INITIAL_ASSUMPTION (hip/knee), 0.01 ankle
+  joint_damping_nms_per_rad: 1.0          # INITIAL_ASSUMPTION
+  joint_frictionloss_nm: 0.2             # INITIAL_ASSUMPTION
+
+control:
+  sim_timestep_s: 0.002                   # CONVENTION (500 Hz physics)
+  policy_rate_hz: 50                      # CONVENTION
+  decimation: 10                          # DERIVED  (500 / 50)
+  action_scale_rad: 0.30                  # INITIAL_ASSUMPTION (~17 deg per joint)
+
+sensors:
+  imu_site: imu
+  actor_can_use: [joint_pos, joint_vel, imu_gyro, projected_gravity, foot_contact]
+  critic_only:  [base_linvel, base_pos]   # privileged; discarded at deployment
+  noise_initial_assumption:
+    joint_pos_rad: 0.003
+    joint_vel_rad_s: 0.1
+    gyro_rad_s: 0.05
+    tilt_rad: 0.02
+    contact_flip_prob: 0.03
+
+world:
+  gravity: [0, 0, -9.81]                  # CONVENTION
+  floor_friction: [1.0, 0.005, 0.0001]    # INITIAL_ASSUMPTION [slide, torsion, roll]

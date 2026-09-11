@@ -1,0 +1,23 @@
+# python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# training artefacts (promote good ones explicitly with `git add -f`)
+logs/**
+!logs/.gitkeep
+checkpoints/**
+!checkpoints/.gitkeep
+policies/**
+!policies/.gitkeep
+wandb/
+*.mp4
+*.monitor.csv
+
+# os
+.DS_Store
+Thumbs.db
