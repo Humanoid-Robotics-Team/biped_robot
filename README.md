@@ -14,21 +14,22 @@ transfer onto real hardware.
 | Milestone | Description | State |
 |-----------|-------------|-------|
 | M0 | Dev environment | in progress |
-| M1 | Static model: XML, joints, mass, collision, stable sim | **verified** |
-| **M2** | **Low-level PD + standing balance controller** | **files ready — verify now** |
-| M3 | Gymnasium environment | not started |
-| M4+ | Standing → stepping → walking → robust → sim-to-real | not started |
+| M1 | Static model: XML, joints, mass, collision, stable sim | verified |
+| M2 | Low-level PD + standing balance controller | verified |
+| **M3** | **Gymnasium environment: obs/action/reward/termination** | **files ready — verify now** |
+| M4 | Standing RL policy (PPO) | not started |
+| M5+ | Stepping → walking → robust → sim-to-real | not started |
 
 ## Repository layout
 
 ```
 config/     robot.yaml (spec), training.yaml (RL config, added at M3)
 mujoco/     robot.xml (model), scene.xml (model + floor + lights) <- load this
-robot/      kinematics / dynamics / sensor helpers (added M3)
-env/        Gymnasium env, observations, rewards, termination (added M3)
+robot/      sensors.py (noise model); kinematics.py/dynamics.py added when M5 needs them
+env/        biped_env.py, observations.py, rewards.py, termination.py (M3 — done)
 control/    pd_controller.py, actuator.py, balance_controller.py (M2 — done)
 training/   train.py, evaluate.py, callbacks.py (added M4)
-scripts/    test_robot.py, visualize.py, test_controller.py
+scripts/    test_robot.py, visualize.py, test_controller.py, test_env.py
 tests/      pytest model/reward/obs checks
 experiments/EXP-registry.md — one row per training run, append only
 ```
@@ -85,3 +86,25 @@ viewer, ctrl+right-click-drag on the robot applies a push you can feel it
 resist (or fall to, if you push hard enough — that boundary is real, not a
 bug: a fixed-footprint ankle strategy is physically limited by the foot's
 support polygon; bigger disturbances need Milestone 7/8 or a learned policy).
+
+## Verify the RL environment (Milestone 3)
+
+```powershell
+python scripts/test_env.py     # gymnasium API, determinism, reward sanity, robustness
+pytest                          # full suite: model + controller + env
+```
+
+Expected: all checks pass, including a zero-action episode that topples at
+~1.8 s (the env is not secretly stabilizing anything — Milestone 4's job is
+to train a policy that keeps the standing controller's stability without
+hard-coding it).
+
+Environment summary: `obs` is 47-dim (projected gravity, base angular
+velocity, velocity command, joint positions/velocities relative to nominal,
+previous action, gait-phase clock — see `env/observations.py`); `action` is
+a 12-dim residual on the nominal joint pose, scaled ±0.30 rad and converted
+to torque by the same `PDController` from Milestone 2 (`env/biped_env.py`).
+`config/training.yaml` is the curriculum knob: at `curriculum_stage: stand`
+all velocity commands are pinned to 0, so `lin_vel_track` simply rewards not
+drifting. Later stages widen the command ranges — no environment code
+changes.
