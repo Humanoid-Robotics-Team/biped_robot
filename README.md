@@ -13,12 +13,18 @@ transfer onto real hardware.
 
 | Milestone | Description | State |
 |-----------|-------------|-------|
-| M0 | Dev environment | in progress |
+| M0 | Dev environment | verified |
 | M1 | Static model: XML, joints, mass, collision, stable sim | verified |
 | M2 | Low-level PD + standing balance controller | verified |
-| **M3** | **Gymnasium environment: obs/action/reward/termination** | **files ready — verify now** |
-| M4 | Standing RL policy (PPO) | not started |
+| M3 | Gymnasium environment: obs/action/reward/termination | verified |
+| **M4** | **Standing RL policy (PPO)** | **achieved — EXP-002, 0% fall rate on 30 held-out episodes** |
 | M5+ | Stepping → walking → robust → sim-to-real | not started |
+
+**Best policy so far:** `policies/EXP-002_final.zip` — trained 2M PPO steps,
+held-out eval: 0/30 episodes fell (full 10s survival), mean tilt 2.84°. See
+[`experiments/EXP-registry.md`](experiments/EXP-registry.md) for the full
+run history, including EXP-001's reward-normalization bug and its fix.
+Watch it: `python scripts/visualize_policy.py --model policies/EXP-002_final.zip`
 
 ## Repository layout
 
