@@ -188,6 +188,7 @@ class BipedEnv(gym.Env):
             "base_height": base_height,
             "height_target": self.height_target,
             "torque": torque_avg,
+            "torque_limit": self.act.torque_limit,
             "action": action,
             "prev_action": self._prev_action,
             "qvel": qd,

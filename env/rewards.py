@@ -38,10 +38,43 @@ REWARD-HACKING GUARDS (Part 10) -- what each penalty is there to stop:
                                       kernel caps the achievable reward at
                                       "moving exactly at the requested
                                       speed", removing that incentive.
+
+NORMALIZATION (added after EXP-001, revised after EXP-001b/c):
+EXP-001's torque penalty was raw sum(tau^2) in Nm^2, unbounded up to
+~172,800 across 12 joints -- under an UNTRAINED policy's near-maximal
+exploration noise it regularly swamped the well-behaved-state total of
+about +3 to +4 (alive + upright + height + tracking), making "end the
+episode immediately" locally better than "keep exploring toward standing."
+EXP-001's curve showed exactly that signature: reward/ep_len fell for the
+first ~450k steps while mean_tilt_deg stayed flat at ~13-16 deg (well under
+the 40 deg fall threshold) -- episodes were ending via height collapse
+under penalty pressure, not by toppling.
+
+The first fix (bounding torque + an unmeasured guess at a joint_acc scale)
+was incomplete: an actual random-action measurement (500 steps, see
+scripts/test_env.py-style probe in the Milestone 4 writeup) showed
+joint_acc and foot_slip -- NOT torque -- were the real dominant terms,
+reaching unweighted means of -22.7 and -11.6 and single-step worsts of
+-64.3 and -88.7 respectively, versus torque's worst of only -0.27 once
+normalized. Guessing a normalization constant without measuring was the
+mistake; every penalty term below is now EXPLICITLY CLIPPED before being
+normalized, so each unweighted term is hard-bounded to [-1, 0] no matter
+how chaotic the motion gets -- the clip bounds (ACC_CLIP, SLIP_CLIP) are
+INITIAL ASSUMPTIONs (generous "this would already be violent" values), not
+measured hardware limits; revisit once gait data from a standing policy
+exists. With every penalty bounded to [-1,0] and current weights
+(sum ~2.15), the worst possible per-step penalty is now ~-2.15, well below
+a single alive/upright/height/tracking step's worth (~+3 to +4) -- so
+surviving an additional step can no longer be worse than ending the
+episode, removing the perverse incentive by construction rather than by
+hoping the scale is small enough.
 """
 from __future__ import annotations
 
 import numpy as np
+
+ACC_CLIP = 400.0   # rad/s^2 -- INITIAL ASSUMPTION, "already violently fast"
+SLIP_CLIP = 2.0     # m/s -- INITIAL ASSUMPTION, "already clearly sliding"
 
 
 def compute_reward(state: dict, weights: dict, tracking_sigma: float,
@@ -58,15 +91,24 @@ def compute_reward(state: dict, weights: dict, tracking_sigma: float,
     r["height"] = float(np.exp(-((state["base_height"] - state["height_target"]) ** 2) / tracking_sigma))
     r["alive"] = 1.0
 
-    r["torque"] = -float(np.sum(np.square(state["torque"])))
-    r["action_rate"] = -float(np.sum(np.square(state["action"] - state["prev_action"])))
-    r["joint_acc"] = -float(np.sum(np.square((state["qvel"] - state["prev_qvel"]) / state["dt"])))
+    # Every penalty below: clip to a generous physical bound FIRST, then
+    # normalize by that same bound -> unweighted term is always in [-1, 0].
+    torque_frac = state["torque"] / state["torque_limit"]  # already in [-1,1] (actuator-clamped)
+    r["torque"] = -float(np.mean(np.square(torque_frac)))
 
-    slip = 0.0
+    action_diff = np.clip(state["action"] - state["prev_action"], -2.0, 2.0) / 2.0
+    r["action_rate"] = -float(np.mean(np.square(action_diff)))
+
+    joint_acc = np.clip((state["qvel"] - state["prev_qvel"]) / state["dt"], -ACC_CLIP, ACC_CLIP) / ACC_CLIP
+    r["joint_acc"] = -float(np.mean(np.square(joint_acc)))
+
+    slip_terms = []
     for in_contact, foot_xy_vel in zip(state["foot_contact"], state["foot_xy_vel"]):
         if in_contact:
-            slip += float(np.sum(np.square(foot_xy_vel)))
-    r["foot_slip"] = -slip
+            speed = np.clip(np.linalg.norm(foot_xy_vel), 0.0, SLIP_CLIP) / SLIP_CLIP
+            slip_terms.append(speed ** 2)
+    r["foot_slip"] = -float(np.mean(slip_terms)) if slip_terms else 0.0
+
     r["collision"] = -1.0 if state["non_foot_contact"] else 0.0
 
     total = sum(weights.get(name, 0.0) * value for name, value in r.items())

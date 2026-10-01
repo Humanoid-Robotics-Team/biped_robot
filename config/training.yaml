@@ -30,22 +30,34 @@ env:
     # Deliberately loose for early training (Part 11) -- a policy that has
     # not yet learned to balance needs room to wobble and still collect
     # reward. Tighten as curriculum_stage advances.
+    # min_base_height_m was 0.55 for EXP-001; that run's mean_tilt_deg stayed
+    # flat at ~13-16 deg for its entire 770k steps (nowhere near
+    # max_tilt_deg) while episodes kept ending early -- i.e. almost every
+    # termination was a height-triggered "knee buckle" from exploration
+    # noise, not an actual fall. Loosened to 0.45 so the policy survives
+    # further into a crouch before being cut off.
     max_tilt_deg: 40
-    min_base_height_m: 0.55
+    min_base_height_m: 0.45
 
 reward:
   # exp(-error^2 / tracking_sigma) width used by the tracking terms
   tracking_sigma: 0.25
   fall_penalty: 10.0
+  # torque/joint_acc are now normalized to O(1) in env/rewards.py (see that
+  # file's docstring for why -- EXP-001's raw sum(tau^2) penalty could swing
+  # to -15..-20/step during early exploration, versus a well-behaved-state
+  # total of about +3..+4, making "end the episode fast" locally optimal).
+  # Weights below are rescaled for the normalized terms; re-tune with
+  # TensorBoard once more runs exist.
   weights:
     lin_vel_track: 1.5   # at stage 'stand' (cmd=0) this rewards staying put
     ang_vel_track: 0.5
     upright: 1.0
     height: 0.5
     alive: 0.5
-    torque: 0.0001
-    action_rate: 0.01
-    joint_acc: 0.0000025
+    torque: 0.5
+    action_rate: 0.05
+    joint_acc: 0.1
     foot_slip: 0.5
     collision: 1.0
 
